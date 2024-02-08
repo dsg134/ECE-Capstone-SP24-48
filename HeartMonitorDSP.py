@@ -56,20 +56,11 @@ class HeartMonitorDSP:
 
         return self.Filtered_FFT
 
-    # Functions for debugging and analysis:
-
     # Plot FFT data (can be filtered or unfiltered)
     def plot_FFT(self, FFT_data):
         time_vector = np.linspace(0, len(FFT_data) * self.sample_properties[1], endpoint=False)
         FFT_vector = np.array(FFT_data)
         frequency_vector = fftfreq(len(FFT_data), self.sample_properties[1])[:len(FFT_data) // 2]
         plt.plot(frequency_vector, 2 / len(FFT_data) * np.abs(FFT_data[0 : len(FFT_vector) // 2]))
-        plt.grid()
-        plt.show()
-
-    # Plot reconstructed heartbeat data
-    def plot_heartbeat(self, data):
-        time_vector = np.linspace(0, len(data) * self.sample_properties[1], endpoint=False)
-        plt.plot(time_vector, np.array(data))
         plt.grid()
         plt.show()
