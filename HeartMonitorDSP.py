@@ -50,17 +50,10 @@ class HeartMonitorDSP:
 
         return self.Filtered_FFT
 
-    # IFFT of filtered heartbeat data
-    def IFFT_Heart_Signal(self, Filtered_FFT_vector):
-        self.Filtered_Heartbeat = ifft(Filtered_FFT_vector)
-
-        return self.Filtered_Heartbeat
-
-    # User will call this function to reconstruct heartbeat signal
-    def Reconstruct_Heartbeat(self):
+    # User will call this function to produce a spectrum that gets fed into the RNN
+    def Filter_Signal(self):
         self.FFT_Heart_Signal(self.heart_samples)
         self.Lowpass_Filter(self.FFT)
-        self.IFFT_Heart_Signal(self.Filtered_FFT)
 
         return self.Filtered_Heartbeat
 
