@@ -2,7 +2,7 @@ from scipy.fft import fft, ifft
 import numpy as np
 import matplotlib.pyplot as plt
 
-# DSP Code for Heartbeat Signal Reconstruction
+# DSP Code for vital sign monitoring system
 # Rutgers ECE Capstone SP24-48
 
 class HeartMonitorDSP:
