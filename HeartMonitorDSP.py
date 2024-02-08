@@ -17,7 +17,6 @@ class HeartMonitorDSP:
         # Define DSP Data
         self.FFT = None
         self.Filtered_FFT = None
-        self.Filtered_Heartbeat = None
 
     # Store heart data information
     def Init_heart_data(self, heart_data, spacing):
@@ -55,7 +54,7 @@ class HeartMonitorDSP:
         self.FFT_Heart_Signal(self.heart_samples)
         self.Lowpass_Filter(self.FFT)
 
-        return self.Filtered_Heartbeat
+        return self.FFT
 
     # Functions for debugging and analysis:
 
