@@ -54,7 +54,7 @@ class HeartMonitorDSP:
         self.FFT_Heart_Signal(self.heart_samples)
         self.Lowpass_Filter(self.FFT)
 
-        return self.FFT
+        return self.Filtered_FFT
 
     # Functions for debugging and analysis:
 
