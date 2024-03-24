@@ -141,4 +141,3 @@ function SteerBeamOnArduino(arduinoPort, Voltages)
     end
 
     end
-end
