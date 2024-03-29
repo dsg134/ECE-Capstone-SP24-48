@@ -13,8 +13,6 @@ end
 
 disp(Voltages)
 
-%SteerBeamOnArduino(port, Voltages)
-
 %% DPS Function
 function voltage = DPS(target_angle, null_angle)
     
@@ -99,45 +97,3 @@ function voltage = DPS(target_angle, null_angle)
     v2 = (ind2 - 1) * 0.2;
     voltage = reshape([v1; v2], 1, []);    
 end
-
-%%Beam Steering
-function SteerBeamOnArduino(arduinoPort, Voltages)
-    % Define Arduino characteristics
-    Arduino = arduino(arduinoPort, 'Mega');
-    ACpins = ["D4", "D5", "D6", "D7", "D8", "D9", "D10", "D11"];
-    DCpins = ["D14", "D15", "D16", "D17", "D18", "D19", "D20", "D21"];
-    
-    for i=1:1:length(ACpins)
-        % Define PWM pins
-        configurePin(Arduino,ACpins(i),'PWM'); % Phase Shifter i
-    
-        % Define Digital/IO pins for multiplexing
-        configurePin(Arduino, DCpins(i),'DigitalOutput'); % MUX i
-    end
-
-    % Required voltages at the output of the RC filter
-    Corrected_Voltages = (Voltages - 15) / (-0.0547 * 51);
-    
-    % Pin control
-    [rows, cols] = size(Voltages);
-
-    while true
-
-        for i = 1:1:rows
-            for j = 1:1:cols
-                % Write PWM voltages and MUX signals
-                if (Voltages(i, j) >= 1)
-                    writePWMVoltage(Arduino, ACpins(j), Corrected_Voltages(i, j));
-                    writeDigitalPin(Arduino, DCpins(j), 0);
-                else
-                    writePWMVoltage(Arduino, ACpins(j), Voltages(i, j));
-                    writeDigitalPin(Arduino, DCpins(j), 1);
-                end
-            end
-        end
-
-        pause(10); % Monitoring time per target (in seconds)
-        
-    end
-
-    end
