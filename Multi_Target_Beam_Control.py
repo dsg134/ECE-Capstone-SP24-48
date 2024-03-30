@@ -1,15 +1,17 @@
 # DPS libs
 import numpy as np
 import cmath
+import math
 
 # Arduino libs
 import serial
 import time
 
+# Define a path for phase_set, imported file must be of type '.npy'
 phase_set = np.load('C:\\Users\\Sythr\\OneDrive\\Documents\\BeamSteeringAlgorithm\\phase_set.npy')
 
 # Convert the data into a 76 by 9 matrix with complex numbers
-phase_set = np.array(phase_set, dtype=complex)
+phase_set = np.array(phase_set, dtype = complex)
 
 # Phased array parameters
 nt = 4
@@ -22,7 +24,11 @@ def DPS(target_angle, null_angle):
     theta = np.arange(-90, 91, 1)
     st = np.exp(-1j * 2 * np.pi * dt * np.arange(nt)[:, np.newaxis] * np.sin(theta*np.pi/180))
 
-    A = st[:, null_angle + 90]
+    shifted_null_angles = null_angle
+    for vals in null_angle:
+        shifted_null_angles = vals + 90
+
+    A = st[:, shifted_null_angles]
 
     # Check the shape of A
     if A.ndim == 1:
@@ -32,7 +38,7 @@ def DPS(target_angle, null_angle):
     conj_row = P_A[:, 0]
     conj_row = conj_row.conj()
 
-    P_A = np.eye(nt, dtype=complex)
+    P_A = np.eye(nt, dtype = complex)
 
     P_A[0][0] = conj_row[0]
     P_A[0][1] = conj_row[1]
@@ -61,7 +67,7 @@ def DPS(target_angle, null_angle):
     ang_ind = np.zeros([nt, num * num], dtype = int)
 
     # Choose largest-valued index for location of the maximum value
-    m = max_index = max((i for i, x in enumerate(np.abs(w)) if x == max(np.abs(w))), default=None)
+    m = max_index = max((i for i, x in enumerate(np.abs(w)) if x == max(np.abs(w))), default = None)
 
     temp = np.zeros([76, 76], dtype = complex)
     for i in range(0, 4):
@@ -110,7 +116,7 @@ def DPS(target_angle, null_angle):
     null_angle_rad = np.radians(null_angle)
 
     # Compute st matrix
-    st = np.exp(-1j * 2 * np.pi * 0.5 * np.outer(np.arange(nt), np.sin([target_angle_rad, null_angle_rad])))
+    st = np.exp(-1j * 2 * np.pi * 0.5 * np.outer(np.arange(nt), np.sin(target_angle_rad * np.pi / 180)))
 
     for z in range(K):
         w_appro = np.zeros((nt, 1), dtype = complex)
@@ -119,7 +125,7 @@ def DPS(target_angle, null_angle):
         bp = np.abs(np.dot(w_appro.T.conj(), st))**2
         bp = 10 * np.log10(bp)
         bp = bp - np.max(bp)
-        null_depth[z] = 2 * np.mean(bp[0] - bp[0,1])
+        null_depth[z] = 2 * np.mean(bp[0] - bp[0,:])
 
     final_k = np.argmax(null_depth)
 
@@ -135,25 +141,68 @@ def DPS(target_angle, null_angle):
 
     return voltage
 
+# Converts phase shifter voltages to their corresponding quantization level
+def quantize(voltages):
+
+    analog_levels = [0, 0, 0, 0, 0, 0, 0, 0]
+    MUX_control = [0, 0, 0, 0, 0, 0, 0, 0]
+
+    for i in range(0, len(voltages)):
+        if voltages[i] >= 1:
+            analog_levels[i] = math.floor((voltages[i] - 15) / (-0.0547))
+            MUX_control[i] = 0
+        else:
+            analog_levels[i] = math.floor(voltages[i] / 51)
+            MUX_control[i] = 1
+
+    quantized_data = analog_levels + MUX_control
+    return quantized_data
+
+# Send PWM and MUX commands to the arduino over serial
+def send_data_to_arduino(PWM, MUX):
+
+    # Send MUX commands to Arduino
+    for i in range(0, 7):
+        ser.write(f"{i} {MUX[i]}\n".encode())
+
+    # Send PWM commands to Arduino
+    for j in range(8, 15):
+        ser.write(f"{j} {PWM[j - 8]}\n".encode())
+
 # Main function for beam steering control
 def main():
 
     # Define the serial port and baud rate
-    #serial_port = 'COM3'  # Update this with the appropriate port for your Arduino
-    #baud_rate = 9600
+    serial_port = 'COM3'  # Update this with the appropriate port for your Arduino
+    baud_rate = 9600
 
     # Open the serial connection
-    #arduino = serial.Serial(serial_port, baud_rate, timeout=1)
+    arduino = serial.Serial(serial_port, baud_rate, timeout = 1)
+    time.sleep(2)
 
-    # Wait for the Arduino to reset
-    #time.sleep(2)
+    # Targets
+    target_angles = [10, 40]
 
-    target_angle = 10
-    null_angle = 40
+    # Monitoring time per target (seconds)
+    monitoring_time = 10
 
-    ... # Put voltage control code here
+    # Determine the phase shifter voltages
+    for k in range(0, len(target_angles)):
+        null_angles = list(target_angles)
+        null_angles.remove(target_angles[k])
+        voltages = DPS(target_angles[k], null_angles)
+        print("DPS Voltages:", voltages)
 
-    print(DPS(target_angle, null_angle))
+        # Determine analog levels and MUX control commands
+        quantized_voltages = quantize(voltages)
+        analog_levels = quantized_voltages[0:7]
+        MUX_control = quantized_voltages[8:15]
+        print("Analog levels:", analog_levels)
+        print("MUX control:", MUX_control)
+
+        # Send data to arduino for control
+        send_data_to_arduino(analog_levels, MUX_control)
+        time.sleep(monitoring_time)
 
 if __name__ == "__main__":
     main()
