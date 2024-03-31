@@ -1,82 +1,105 @@
+# DPS libs
 import numpy as np
+import math
+from oct2py import octave
 
-def DPS(target_angle, null_angle):
-    # Load phase set
-    phase_set = np.load('phase_set.npy')
-    set = phase_set
+# Arduino libs
+import serial
+import time
 
-    # Global Parameters
-    nt = 4  # number of Transmitters
-    dt = 0.5  # Transmitter spacing / wavelength
-    K = 4  # how many sets of solutions to compare
+# DPS function to determine steering voltages
+def call_octave_dps(target_angle, null_angle):
+    # Call the DPS function in Octave
+    try:
+        voltages = octave.DPS(target_angle, null_angle)
+    except Exception as e:
+        print("Error calling DPS function in Octave:", e)
+        voltages = None
+    return voltages
 
-    theta = np.arange(-90, 91, 1)
-    st = np.exp(-1j * 2 * np.pi * dt * np.outer(np.arange(nt), np.sin(np.deg2rad(theta))))  # steering matrix
+# Converts phase shifter voltages to their corresponding quantization level
+def quantize(voltages):
 
-    # Beamformer
-    A = st[:, null_angle + 90]
-    P_A = np.eye(nt) - A @ np.linalg.inv(A.conj().T @ A) @ A.conj().T
-    w = P_A @ st[:, target_angle + 90]
+    analog_levels = [0, 0, 0, 0, 0, 0, 0, 0]
+    MUX_control = [0, 0, 0, 0, 0, 0, 0, 0]
 
-    m = np.argmax(np.abs(w))
-    num = set.shape[0]
-    S = np.zeros((nt, num ** 2), dtype=np.complex128)
-    S_ang = np.zeros_like(S, dtype=np.float64)
-    ang_ind = np.zeros_like(S, dtype=np.int64)
-    for i in range(nt):
-        temp = set[:, 2 * i - 1] + set[:, 2 * i].T
-        S[i, :] = temp.flatten()
-        S_ang[i, :] = np.angle(S[i, :])
-        ang_ind[i, :] = np.argsort(S_ang[i, :])
+    for i in range(0, len(voltages)):
+        if voltages[i] >= 1:
+            analog_levels[i] = math.floor((voltages[i] - 15) / (-0.0547))
+            MUX_control[i] = 0
+        else:
+            analog_levels[i] = math.floor(voltages[i] / 51)
+            MUX_control[i] = 1
 
-    resi = num ** 2 // K
-    ind = np.zeros((K, nt), dtype=np.int64)
-    for k in range(K):
-        Smk = S[m, ang_ind[m, (k * resi):((k + 1) * resi)]]
-        max_ind = np.argmax(np.abs(Smk))
-        alpha = Smk[max_ind] / w[m]
-        for n in range(nt):
-            if m == n:
-                ind[k, n] = ang_ind[m, max_ind + k * resi]
-                continue
-            temp = w[n] * alpha
-            for j in range(K):
-                Snk_min = S[n, ang_ind[n, j * resi]]
-                Snk_max = S[n, ang_ind[n, (j + 1) * resi - 1]]
-                if np.angle(temp) >= np.angle(Snk_min) and np.angle(temp) <= np.angle(Snk_max):
-                    break
-            n_ind = np.argmin(np.abs(S[n, ang_ind[n, j * resi]:((j + 1) * resi)] - temp))
-            ind[k, n] = ang_ind[n, n_ind + j * resi]
+    quantized_data = analog_levels + MUX_control
+    return quantized_data
 
-    null_depth = np.zeros((K,))
-    st = np.exp(-1j * 2 * np.pi * 0.5 * np.array([0, 1])[:, np.newaxis] * np.sin(np.deg2rad([target_angle, null_angle])))
+# Main function for beam steering control
+def main():
 
-    for z in range(K):
-        w_appro = np.array([S[zz, ind[z, zz]] for zz in range(nt)])
-        bp = np.abs(w_appro.conj().T @ st)**2
-        bp = 10 * np.log10(bp)
-        bp = bp - np.max(bp)
-        null_depth[z] = np.mean(bp[0] - bp[1:])
+    # Define the serial port and baud rate
+    serial_port = 'COM3'  # Update this with the appropriate port for your Arduino
+    baud_rate = 9600
 
-    final_k = np.argmax(null_depth)
-    ind2 = np.ceil(ind[final_k, :] / 76).astype(int)
-    ind1 = ind[final_k, :] - (ind2 - 1) * 76
+    # Open the serial connection
+    arduino = serial.Serial(serial_port, baud_rate, timeout = 1)
 
-    v1 = (ind1 - 1) * 0.2
-    v2 = (ind2 - 1) * 0.2
-    voltage = np.concatenate((v1, v2))
+    # Wait for the Arduino to reset
+    time.sleep(2)
 
-    return voltage
+    # Targets
+    target_angles = [40, 20]
 
-angles = [5, 25, 30]
-Voltages = np.zeros((len(angles), 152))
+    # Store DPS voltages for each target
+    voltage_storage = []
+    
+    # Load the "DPS.m" file into the Octave workspace
+    octave.addpath('C:\\Users\\Sythr\\OneDrive\\Documents\\BeamSteeringAlgorithm')  # Add the directory containing DPS.m if necessary
+    octave.eval('warning("off", "Octave:data-file-in-path")')  # Suppress the specific warning
+    
+    # Modify the path to the correct location of the "DPS.m" file
+    try:
+        octave.eval('source("C:\\Users\\Sythr\\OneDrive\\Documents\\BeamSteeringAlgorithm\\DPS.m")')
+    except Exception as e:
+        pass
+    
+    # Call the function and print the result
+    for val in range(0, len(target_angles)):
+        null_angle = list(target_angles)
+        null_angle.remove(null_angle[val])
+        temp_voltages = call_octave_dps(target_angles[val], null_angle)
+        voltage_storage.append(temp_voltages[0])
 
-for i in range(len(angles)):
-    # DPS (magnitude first search)
-    null_angles = angles[:]
-    null_angles.pop(i)
-    Voltages[i, :] = DPS(angles[i], null_angles)
+    # Monitoring time per target (seconds)
+    monitoring_time = 10
 
-print(Voltages)
+    # Total number of monitoring cycles
+    monitoring_cycles = 3
 
-# SteerBeamOnArduino(port, Voltages)
+    # Determine the phase shifter voltages
+    for cycles in range(monitoring_cycles):
+        for k in range(0, len(target_angles)):
+            voltages = voltage_storage[k]
+            print("DPS Voltages:", voltages)
+
+            # Determine analog levels and MUX control commands
+            quantized_voltages = quantize(voltages)
+            analog_levels = quantized_voltages[0:7]
+            MUX_control = quantized_voltages[8:15]
+            print("Analog levels:", analog_levels)
+            print("MUX control:", MUX_control)
+
+            # Send data to arduino for control
+            
+            # Send MUX commands to Arduino
+            for i in range(0, 7):
+                arduino.write(f"{i} {MUX_control[i]}\n".encode())
+
+            # Send PWM commands to Arduino
+            for j in range(8, 15):
+                arduino.write(f"{j} {analog_levels[j - 8]}\n".encode())
+
+            time.sleep(monitoring_time)
+
+if __name__ == "__main__":
+    main()
