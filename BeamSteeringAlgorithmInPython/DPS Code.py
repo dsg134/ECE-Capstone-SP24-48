@@ -244,7 +244,6 @@ def Beampattern(voltages, target_angles, flag = False):
         
 # Main function for beam steering control
 def main():
-    '''
     # Define the serial port and baud rate
     serial_port = 'COM3'  # Update this with the appropriate port for your Arduino
     baud_rate = 9600
@@ -254,7 +253,6 @@ def main():
 
     # Wait for the Arduino to reset
     time.sleep(2)
-    '''
 
     # Targets
     target_angles = [-89, -50,-10, 30, 65, 90]
@@ -281,7 +279,6 @@ def main():
     # Total number of monitoring cycles
     monitoring_cycles = 1
 
-    '''
     # Determine the phase shifter voltages
     for cycles in range(monitoring_cycles):
         for k in range(0, len(target_angles)):
@@ -306,7 +303,6 @@ def main():
                 arduino.write(f"{j} {analog_levels[j - 8]}\n".encode())
 
             time.sleep(monitoring_time)
-            '''
 
 if __name__ == "__main__":
     main()
