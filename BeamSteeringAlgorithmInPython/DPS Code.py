@@ -5,7 +5,7 @@ import math
 import matplotlib.pyplot as plt
 
 # Arduino libs
-#import serial
+import serial
 import time
 
 # Define a path for phase_set, imported file must be of type '.npy'
